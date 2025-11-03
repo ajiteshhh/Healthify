@@ -15,6 +15,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+print("✅ FastAPI routes loaded:", [route.path for route in app.router.routes])
 
 @app.get("/")
 def home():

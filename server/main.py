@@ -7,6 +7,7 @@ import json
 import time
 import os
 import struct
+import pickle
 
 app = FastAPI()
 
@@ -69,7 +70,6 @@ async def save_avg_to_db():
             last_save_time = time.time()
         except Exception as e:
             print(f"❌ Error saving vitals to DB: {e}")
-
 
 @app.websocket("/ws/esp32/vitals")
 async def esp32_vitals_ws(websocket: WebSocket):
@@ -192,11 +192,29 @@ def detect_beats_and_extract_187(samples):
 
     return beats
 
-
+arr_labels = {0: "Normal", 1: "PVC", 2: "PAC", 3: "LBBB", 4: "RBBB"}
 async def run_model_on_beat(beat_187):
-    # TODO: replace with real model call
-    return int(0)  # class prediction placeholder
+    beat_arr = np.array(beat_187).reshape(1, -1)
+    arr_class = arr_model.predict(beat_arr)[0]
+    arr = arr_labels.get(arr_class, str(arr_class))
+    return arr
 
+
+@app.websocket("/ws/client/ecg")
+async def client_ecg_ws(websocket: WebSocket):
+    await websocket.accept()
+    ecg_clients.append(websocket)
+    print(f"🖥️ ECG client connected (total: {len(ecg_clients)})")
+    try:
+        while True:
+            await websocket.receive_text()  # keep alive
+    except WebSocketDisconnect:
+        if websocket in ecg_clients:
+            ecg_clients.remove(websocket)
+        print("❌ ECG client disconnected")
+
+with open("models/arrhythmia_model.pkl", "rb") as f:
+    arr_model = pickle.load(f)
 
 @app.websocket("/ws/esp32/ecg")
 async def esp32_ecg_ws(websocket: WebSocket):
@@ -230,6 +248,7 @@ async def esp32_ecg_ws(websocket: WebSocket):
                         ecg_clients.remove(c)
 
                 # ✅ R-peak → 187-sample beat → classify
+                
                 beats = detect_beats_and_extract_187(samples)
                 for beat in beats:
                     pred = await run_model_on_beat(beat)

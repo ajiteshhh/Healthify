@@ -6,7 +6,7 @@ import numpy as np
 import json
 import time
 import os
-import asyncio
+import struct
 
 app = FastAPI()
 
@@ -154,26 +154,25 @@ async def client_vitals_ws(websocket: WebSocket):
 # ================================
 # ✅ ECG Stream + Beat Detection
 # ================================
+
 ecg_clients = []
 ECG_BUFFER = np.array([], dtype=float)
-MAX_BUFFER = 2000  # ~5.5 seconds @ 360Hz
+MAX_BUFFER = 2000  # ~5.5 seconds buffer @ 360Hz
+BATCH_SIZE = 50    # Send + process in chunks
 
 
 def detect_beats_and_extract_187(samples):
-    """Append samples to buffer, detect R peaks, extract 187-sample beats"""
     global ECG_BUFFER
 
     samples = np.array(samples, dtype=float)
     ECG_BUFFER = np.concatenate((ECG_BUFFER, samples))
 
-    # Trim buffer
     if len(ECG_BUFFER) > MAX_BUFFER:
         ECG_BUFFER = ECG_BUFFER[-MAX_BUFFER:]
 
-    # --- R-peak detection (simple slope-energy) ---
     diff = np.diff(ECG_BUFFER, prepend=ECG_BUFFER[0])
     squared = diff**2
-    win = int(0.1 * 360)  # 0.1s smoothing
+    win = int(0.1 * 360)
     mwa = np.convolve(squared, np.ones(win)/win, mode="same")
 
     threshold = np.mean(mwa) + 2*np.std(mwa)
@@ -183,11 +182,11 @@ def detect_beats_and_extract_187(samples):
     ]
 
     beats = []
-    r_window = 93  # 93 before, 93 after (187 total)
+    r = 93
 
-    for r in peaks:
-        if r-r_window >= 0 and r+r_window < len(ECG_BUFFER):
-            beat = ECG_BUFFER[r-r_window:r+r_window+1]
+    for p in peaks:
+        if p-r >= 0 and p+r < len(ECG_BUFFER):
+            beat = ECG_BUFFER[p-r:p+r+1]
             if len(beat) == 187:
                 beats.append(beat.tolist())
 
@@ -195,10 +194,8 @@ def detect_beats_and_extract_187(samples):
 
 
 async def run_model_on_beat(beat_187):
-    """Call your ML classification model (0-5)"""
-    # TODO — replace with real model call
-    pred = 0  # dummy class
-    return pred
+    # TODO: replace with real model call
+    return int(0)  # class prediction placeholder
 
 
 @app.websocket("/ws/esp32/ecg")
@@ -206,58 +203,50 @@ async def esp32_ecg_ws(websocket: WebSocket):
     await websocket.accept()
     print("✅ ESP32 ECG connected")
 
+    temp_batch = []
+
     try:
         while True:
-            raw = await websocket.receive_text()
-            data = json.loads(raw)
+            message = await websocket.receive_bytes()
 
-            samples = data.get("samples", [])
-            if not samples:
+            # Must be exactly 4 bytes (float32)
+            if len(message) != 4:
                 continue
 
-            # ✅ Send raw ECG to UI
-            for c in ecg_clients:
-                try:
-                    await c.send_json({"type": "ecg", "samples": samples})
-                except:
-                    ecg_clients.remove(c)
+            # Decode little-endian float32
+            (mV,) = struct.unpack("<f", message)
+            temp_batch.append(mV)
 
-            # ✅ Detect beats and extract 187-sample windows
-            beats = detect_beats_and_extract_187(samples)
+            # Process + forward in small groups
+            if len(temp_batch) >= BATCH_SIZE:
+                samples = temp_batch[:]
+                temp_batch = []
 
-            for beat in beats:
-                pred = await run_model_on_beat(beat)
-
-                # ✅ Send prediction to UI
+                # ✅ Forward raw samples to UI
                 for c in ecg_clients:
                     try:
-                        await c.send_json({
-                            "type": "prediction",
-                            "class": int(pred),
-                            "beat": beat
-                        })
+                        await c.send_json({"type": "ecg", "samples": samples})
                     except:
                         ecg_clients.remove(c)
+
+                # ✅ R-peak → 187-sample beat → classify
+                beats = detect_beats_and_extract_187(samples)
+                for beat in beats:
+                    pred = await run_model_on_beat(beat)
+                    for c in ecg_clients:
+                        try:
+                            await c.send_json({
+                                "type": "prediction",
+                                "class": pred,
+                                "beat": beat
+                            })
+                        except:
+                            ecg_clients.remove(c)
 
     except WebSocketDisconnect:
         print("❌ ESP32 ECG disconnected")
     except Exception as e:
-        print(f"❌ ECG Stream Error: {e}")
-
-
-@app.websocket("/ws/client/ecg")
-async def client_ecg_ws(websocket: WebSocket):
-    await websocket.accept()
-    ecg_clients.append(websocket)
-    print(f"🖥️ Client connected: {len(ecg_clients)}")
-
-    try:
-        while True:
-            await websocket.receive_text()
-    except:
-        if websocket in ecg_clients:
-            ecg_clients.remove(websocket)
-
+        print(f"❌ Error: {e}")
 
 # ===========================
 # ✅ Legacy endpoints (kept for backward compatibility)

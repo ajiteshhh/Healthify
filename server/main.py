@@ -52,17 +52,18 @@ async def save_avg_to_db():
             avg_spo2 = sum(v[1] for v in vitals_buffer) / len(vitals_buffer)
             avg_temp = sum(v[2] for v in vitals_buffer) / len(vitals_buffer)
 
-            conn = get_db_connection()
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO vitals (heart_rate, spo2, temperature) VALUES (%s, %s, %s)",
-                (avg_hr, avg_spo2, avg_temp)
-            )
-            conn.commit()
-            cur.close()
-            conn.close()
+            if avg_hr > 30 and avg_spo2 > 50 and avg_temp > 20:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO vitals (heart_rate, spo2, temperature) VALUES (%s, %s, %s)",
+                    (avg_hr, avg_spo2, avg_temp)
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
 
-            print(f"✅ Saved vitals avg: HR={avg_hr:.1f}, SpO2={avg_spo2:.1f}, Temp={avg_temp:.1f}")
+                print(f"✅ Saved vitals avg: HR={avg_hr:.1f}, SpO2={avg_spo2:.1f}, Temp={avg_temp:.1f}")
 
             vitals_buffer = []
             last_save_time = time.time()

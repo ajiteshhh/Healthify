@@ -4,6 +4,7 @@ from database import get_db_connection
 from datetime import datetime
 import numpy as np
 import json
+import time
 
 app = FastAPI()
 
@@ -19,79 +20,79 @@ app.add_middleware(
 def home():
     return {"message": "Health Monitor API running 🚀"}
 
+# connected clients (browsers)
+clients = []
 
-# ===========================
-# ✅ HR + SpO2 Endpoints
-# ===========================
+# buffer for last 5 seconds of ESP32 data
+vitals_buffer = []
+last_save_time = time.time()
 
-@app.post("/api/v1/vitals/heartrate_spo2")
-async def post_hr_spo2(request: Request):
-    data = await request.json()
-    hr = data.get("heartRate")
-    spo2 = data.get("spo2")
+async def save_avg_to_db():
+    global vitals_buffer, last_save_time
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO vitals_heartrate_spo2 (heart_rate, spo2) VALUES (%s, %s)",
-        (hr, spo2)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    # every 5 seconds store avg
+    if time.time() - last_save_time >= 5 and len(vitals_buffer) > 0:
+        avg_hr = sum(v[0] for v in vitals_buffer) / len(vitals_buffer)
+        avg_spo2 = sum(v[1] for v in vitals_buffer) / len(vitals_buffer)
+        avg_temp = sum(v[2] for v in vitals_buffer) / len(vitals_buffer)
 
-    return {"success": True, "message": "HR & SpO2 saved"}
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO vitals (heart_rate, spo2, temperature) VALUES (%s, %s, %s)",
+            (avg_hr, avg_spo2, avg_temp)
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
 
-
-@app.get("/api/v1/vitals/heartrate_spo2")
-def get_hr_spo2():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM vitals_heartrate_spo2 ORDER BY id DSC")
-    rows = cur.fetchall()
-
-    result = [{"id": r[0], "heart_rate": r[1], "spo2": r[2], "timestamp": r[3]} for r in rows]
-
-    cur.close()
-    conn.close()
-    return result
+        vitals_buffer = []
+        last_save_time = time.time()
 
 
-# ===========================
-# ✅ Temperature Endpoints
-# ===========================
+@app.websocket("/ws/esp32/vitals")
+async def esp32_ws(websocket: WebSocket):
+    global vitals_buffer
 
-@app.post("/api/v1/vitals/temperature")
-async def post_temperature(request: Request):
-    data = await request.json()
-    temp = data.get("temperature")
+    await websocket.accept()
+    print("✅ ESP32 vitals socket connected")
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO vitals_temperature (temperature) VALUES (%s)",
-        (temp,)
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+    try:
+        while True:
+            data = json.loads(await websocket.receive_text())
+            bpm = data.get("bpm")
+            spo2 = data.get("spo2")
+            temp = data.get("temp")
+            # push to buffer
+            vitals_buffer.append((bpm, spo2, temp))
 
-    return {"success": True, "message": "Temperature saved"}
+            # broadcast to UI
+            for c in clients:
+                await c.send_json({
+                    "bpm": bpm,
+                    "spo2": spo2,
+                    "temp": temp
+                })
+
+            # periodically average and store
+            await save_avg_to_db()
+
+    except WebSocketDisconnect:
+        print("❌ ESP32 disconnected")
 
 
-@app.get("/api/v1/vitals/temperature")
-def get_temperature():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM vitals_temperature ORDER BY id DSC")
-    rows = cur.fetchall()
+@app.websocket("/ws/client/vitals")
+async def client_ws(websocket: WebSocket):
+    await websocket.accept()
+    clients.append(websocket)
+    print("🖥️ Client connected")
 
-    result = [{"id": r[0], "temperature": r[1], "timestamp": r[2]} for r in rows]
-
-    cur.close()
-    conn.close()
-    return result
-
+    try:
+        while True:
+            await websocket.receive_text()  # not needed, UI just listens
+    except WebSocketDisconnect:
+        clients.remove(websocket)
+        print("❌ Client disconnected")
 
 # ===========================
 # ✅ ECG WebSocket Handling

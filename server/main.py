@@ -364,6 +364,36 @@ async def ws_client_legacy(websocket: WebSocket):
     print("⚠️ Using legacy /ws/client endpoint, consider using /ws/client/ecg")
     await client_ecg_ws(websocket)
 
+# ===========================
+# ✅ REST Endpoints to get stored vitals
+# ===========================
+
+@app.get("/api/vitals")
+def get_all_vitals():
+    """Return all stored vitals from DB"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT id, heart_rate, spo2, temperature, timestamp FROM vitals ORDER BY id ASC")
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        data = []
+        for row in rows:
+            data.append({
+                "id": row[0],
+                "heart_rate": row[1],
+                "spo2": row[2],
+                "temperature": row[3],
+                "timestamp": row[4].isoformat() if row[4] else None
+            })
+
+        return {"count": len(data), "vitals": data}
+
+    except Exception as e:
+        print(f"❌ Error fetching vitals: {e}")
+        return {"error": "Failed to fetch vitals"}
 
 if __name__ == "__main__":
     import uvicorn

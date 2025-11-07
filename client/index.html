@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Medical Monitoring Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #9aed86 0%, #d65d5d 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .last-update {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+            font-size: 1.1em;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 30px;
+            animation: fadeIn 0.3s;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .vitals-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .vital-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+
+        .vital-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .prediction-card {
+            background: #e9f5ff;
+            border: 2px solid #3498db;
+            color: #2c3e50;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+
+        .prediction-title {
+            font-size: 1.1em;
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .prediction-class {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #3498db;
+            margin: 5px 0;
+        }
+
+        .prediction-beat {
+            font-size: 0.9em;
+            font-weight: 500;
+            opacity: 0.8;
+        }
+
+        .vital-title {
+            font-size: 1.1em;
+            color: #495057;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .vital-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+            color: #212529;
+        }
+
+        .vital-unit {
+            font-size: 0.5em;
+            color: #6c757d;
+            font-weight: normal;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        .status-normal {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-alert {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-top: 20px;
+        }
+
+        .chart-card {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #495057;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .chart-wrapper.ecg {
+            height: 200px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-size: 1.1em;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        .connection-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ffc107;
+            margin-right: 8px;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .section-divider {
+            margin: 40px 0 20px 0;
+            border-top: 2px solid #e9ecef;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Health Monitoring Dashboard</h1>
+            <p class="last-update">
+                <span class="connection-status"></span>
+                Last Updated: <span id="lastUpdate">Connecting...</span>
+            </p>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('live')">Live Health Status</button>
+            <button class="tab" onclick="switchTab('historical')">Historical Charts</button>
+        </div>
+
+        <div id="liveTab" class="tab-content active">
+            <h2 style="margin-bottom: 20px; color: #495057;">🩺 Current Vital Signs & Analysis</h2>
+            <div id="statusContent" class="vitals-grid">
+                <div id="predictionCard" class="prediction-card">
+                    <div class="prediction-title">💓 Heart Beat Prediction</div>
+                    <div class="prediction-class" id="predictionClass">Awaiting Data</div>
+                    <!-- <div class="prediction-beat" id="predictionBeat">Waiting for first analysis...</div> -->
+                </div>
+                <div class="loading" id="vitalsLoading">Connecting to live data...</div>
+            </div>
+
+            <div class="section-divider">
+                <h2 style="margin-bottom: 20px; color: #495057;">📊 Live Vital Signs Charts</h2>
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-card">
+                    <div class="chart-title">Heart Rate (BPM)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="liveBpmChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Blood Oxygen (SpO2)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="liveSpo2Chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Temperature (°C)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="liveTempChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card full-width">
+                    <div class="chart-title">⚡ Live ECG Reading</div>
+                    <div class="chart-wrapper ecg">
+                        <canvas id="liveEcgChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="historicalTab" class="tab-content">
+            <h2 style="margin-bottom: 20px; color: #495057;">📈 Historical Data (Database)</h2>
+            <div class="charts-container">
+                <div class="chart-card">
+                    <div class="chart-title">Heart Rate (BPM)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="histBpmChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Blood Oxygen (SpO2)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="histSpo2Chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Temperature (°C)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="histTempChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let liveCharts = {};
+        let historicalCharts = {};
+        let liveData = [];
+        let ecgBuffer = [];
+        const ECG_BUFFER_SIZE = 720;
+
+        let ecgStartTime = null;
+        let lastEcgReceivedAt = null;
+        let stressDisplayed = false;
+
+        function updatePrediction(predClass, beatType) {
+            const predClassEl = document.getElementById('predictionClass');
+            const predBeatEl = document.getElementById('predictionBeat');
+            const cardEl = document.getElementById('predictionCard');
+
+            if (predClass && beatType) {
+                predClassEl.textContent = predClass;
+
+                if (predClass.toLowerCase().includes('abnormal') || predClass.toLowerCase().includes('warning')) {
+                    cardEl.style.backgroundColor = '#f8d7da';
+                    cardEl.style.borderColor = '#721c24';
+                    predClassEl.style.color = '#721c24';
+                } else {
+                    cardEl.style.backgroundColor = '#e9f5ff';
+                    cardEl.style.borderColor = '#3498db';
+                    predClassEl.style.color = '#3498db';
+                }
+
+                // If prediction message contains beat info, show it in the beat element
+                // if (beatType) {
+                //     predBeatEl.textContent = beatType;
+                //}
+            }
+        }
+
+        function displayStress(status) {
+            const card = document.getElementById('predictionCard');
+            if (!card) return;
+
+            let stressEl = document.getElementById('stressStatus');
+            const timeLabel = new Date().toLocaleTimeString();
+
+            const text = `🧘 Stress Level: ${status}`;
+
+            if (stressEl) {
+                stressEl.textContent = text;
+            } else {
+                stressEl = document.createElement('div');
+                stressEl.id = 'stressStatus';
+                stressEl.className = 'prediction-beat';
+                stressEl.textContent = text;
+                card.appendChild(stressEl);
+            }
+        }
+        
+        function updateStressIfEligible() {
+            const now = Date.now();
+
+            if (!ecgStartTime || (now - ecgStartTime) < 60000) {
+                return;
+            }
+            
+            if (lastEcgReceivedAt && (now - lastEcgReceivedAt) <= 60000) {
+                displayStress('No Stress');
+                stressDisplayed = true;
+            }
+        }
+
+        setInterval(() => {
+            try {
+                updateStressIfEligible();
+            } catch (e) {
+                console.error('Error in stress update interval', e);
+            }
+        }, 60000);
+
+        const ws = new WebSocket("ws://localhost:8000/ws/client/vitals");
+
+        ws.onopen = () => {
+            console.log("✅ Vitals WS Connected");
+            document.querySelector(".connection-status").style.background = "#28a745";
+            document.getElementById('lastUpdate').textContent = "Connected";
+        };
+
+        ws.onerror = (error) => {
+            console.log("❌ Vitals WS Error", error);
+            document.querySelector(".connection-status").style.background = "#dc3545";
+            document.getElementById('lastUpdate').textContent = "Connection Error";
+        };
+
+        ws.onclose = () => {
+            console.log("🔌 Vitals WS Closed");
+            document.querySelector(".connection-status").style.background = "#dc3545";
+            document.getElementById('lastUpdate').textContent = "Disconnected";
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+
+            const heartRate = msg.heart_rate !== undefined ? msg.heart_rate : msg.bpm;
+            const spo2Val = msg.spo2;
+            const tempVal = msg.temperature !== undefined ? msg.temperature : msg.temp;
+            const timestamp = msg.timestamp || new Date().toISOString();
+
+            if (heartRate !== undefined || spo2Val !== undefined || tempVal !== undefined) {
+                const d = {
+                    heart_rate: heartRate,
+                    spo2: spo2Val,
+                    temperature: tempVal,
+                    timestamp: timestamp
+                };
+
+                liveData.unshift(d);
+                if (liveData.length > 100) liveData.pop();
+
+                updateStatus(d);
+                updateLiveCharts(liveData);
+
+                const now = new Date(d.timestamp).toLocaleString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                document.getElementById('lastUpdate').textContent = now;
+            }
+        };
+
+        const wsEcg = new WebSocket("ws://localhost:8000/ws/client/ecg");
+
+        wsEcg.onopen = () => {
+            console.log("✅ ECG WS Connected");
+        };
+
+        wsEcg.onerror = (error) => {
+            console.log("❌ ECG WS Error", error);
+        };
+
+        wsEcg.onclose = () => {
+            console.log("🔌 ECG WS Closed");
+        };
+
+        wsEcg.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === "ecg" && Array.isArray(msg.samples)) {
+                    lastEcgReceivedAt = Date.now();
+
+                    msg.samples.forEach(sample => {
+                        ecgBuffer.push(sample);
+                    });
+
+                    while (ecgBuffer.length > ECG_BUFFER_SIZE) {
+                        ecgBuffer.shift();
+                    }
+
+                    if (!ecgStartTime) {
+                        ecgStartTime = Date.now();
+                    } else {
+                        if (!stressDisplayed && (Date.now() - ecgStartTime >= 60000)) {
+                            updateStressIfEligible();
+                        }
+                    }
+
+                    updateEcgChart(ecgBuffer);
+
+                } else if (msg.type === "prediction") {
+                    updatePrediction(msg.class, msg.beat);
+
+                } else {
+                    console.warn("ECG WebSocket: Unknown message format.", msg);
+                }
+
+            } catch (e) {
+                console.error("Could not parse ECG/Prediction message:", e);
+            }
+        };
+
+        async function fetchHistoricalData() {
+            try {
+                const response = await fetch('http://localhost:8000/api/vitals');
+                if (!response.ok) throw new Error('Failed to fetch historical data');
+
+                const data = await response.json();
+
+                if (data && Array.isArray(data.vitals)) {
+                    const formattedData = data.vitals.map(v => ({
+                        heart_rate: v.heart_rate,
+                        spo2: v.spo2,
+                        temperature: v.temperature,
+                        timestamp: v.timestamp
+                    }));
+                    updateHistoricalCharts(formattedData);
+                } else {
+                    throw new Error('Historical data format invalid (missing "vitals" array).');
+                }
+            } catch (error) {
+                console.error('Error fetching historical data:', error);
+                if (document.getElementById('historicalTab').classList.contains('active')) {
+                    document.getElementById('historicalTab').innerHTML +=
+                        '<div class="error">⚠️ Error loading historical data. Please check your API endpoint and data format.</div>';
+                }
+            }
+        }
+
+        function classifyHypoxemia(spo2) {
+            if (spo2 === null || spo2 === undefined) return { status: 'No Data', class: 'status-info' };
+            if (spo2 < 90) return { status: 'Low SpO2 - Hypoxemia', class: 'status-alert' };
+            return { status: 'Normal', class: 'status-normal' };
+        }
+
+        function classifyFever(temp) {
+            if (temp === null || temp === undefined) return { status: 'No Data', class: 'status-info' };
+            if (temp > 38) return { status: 'Possible Fever', class: 'status-warning' };
+            return { status: 'Normal', class: 'status-normal' };
+        }
+
+        function classifyHeartRate(bpm) {
+            if (bpm === null || bpm === undefined) return { status: 'No Data', class: 'status-info' };
+            if (bpm > 100) return { status: 'Tachycardia', class: 'status-alert' };
+            if (bpm < 60) return { status: 'Bradycardia', class: 'status-warning' };
+            return { status: 'Normal', class: 'status-normal' };
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            event.target.classList.add('active');
+
+            if (tab === 'live') {
+                document.getElementById('liveTab').classList.add('active');
+            } else {
+                document.getElementById('historicalTab').classList.add('active');
+                fetchHistoricalData();
+            }
+        }
+
+        function updateStatus(latest) {
+
+            const predictionCardHtml = document.getElementById('predictionCard') ? document.getElementById('predictionCard').outerHTML : '';
+            const statusContentEl = document.getElementById('statusContent');
+
+            if (!latest) {
+                statusContentEl.innerHTML = predictionCardHtml + '<div class="no-data" id="vitalsLoading">No data available</div>';
+                return;
+            }
+
+            const hypoxemia = classifyHypoxemia(latest.spo2);
+            const fever = classifyFever(latest.temperature);
+            const heartRate = classifyHeartRate(latest.heart_rate);
+
+            const displayHr = latest.heart_rate !== null && latest.heart_rate !== undefined ? Number(latest.heart_rate).toFixed(0) : '--';
+
+            statusContentEl.innerHTML = predictionCardHtml + `
+                <div class="vital-card">
+                    <div class="vital-title">💓 Heart Rate</div>
+                    <div class="vital-value">${displayHr} <span class="vital-unit">BPM</span></div>
+                    <div class="status-badge ${heartRate.class}">${heartRate.status}</div>
+                </div>
+
+                <div class="vital-card">
+                    <div class="vital-title">🫁 Blood Oxygen</div>
+                    <div class="vital-value">${latest.spo2 !== null && latest.spo2 !== undefined ? Number(latest.spo2).toFixed(1) : '--'} <span class="vital-unit">%</span></div>
+                    <div class="status-badge ${hypoxemia.class}">${hypoxemia.status}</div>
+                </div>
+
+                <div class="vital-card">
+                    <div class="vital-title">🌡️ Temperature</div>
+                    <div class="vital-value">${latest.temperature !== null && latest.temperature !== undefined ? Number(latest.temperature).toFixed(1) : '--'} <span class="vital-unit">°C</span></div>
+                    <div class="status-badge ${fever.class}">${fever.status}</div>
+                </div>
+            `;
+            if (stressDisplayed) {
+                displayStress('No Stress');
+            }
+        }
+
+        function initLiveCharts() {
+            const commonOptions = {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, } },
+                scales: {
+                    x: { display: true, title: { display: true, text: 'Time' } },
+                    y: { display: true, beginAtZero: false }
+                }
+            };
+
+            liveCharts.bpm = new Chart(document.getElementById('liveBpmChart'), {
+                type: 'line', data: { labels: [], datasets: [{ label: 'Heart Rate', data: [], borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', tension: 0.4, fill: true }] }, options: commonOptions
+            });
+            liveCharts.spo2 = new Chart(document.getElementById('liveSpo2Chart'), {
+                type: 'line', data: { labels: [], datasets: [{ label: 'SpO2', data: [], borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.1)', tension: 0.4, fill: true }] }, options: commonOptions
+            });
+            liveCharts.temp = new Chart(document.getElementById('liveTempChart'), {
+                type: 'line', data: { labels: [], datasets: [{ label: 'Temperature', data: [], borderColor: '#f39c12', backgroundColor: 'rgba(243, 156, 18, 0.1)', tension: 0.4, fill: true }] }, options: commonOptions
+            });
+
+            liveCharts.ecg = new Chart(document.getElementById('liveEcgChart'), {
+                type: 'line',
+                data: {
+                    labels: Array(ECG_BUFFER_SIZE).fill(''),
+                    datasets: [{ label: 'ECG', data: [], borderColor: '#27ae60', backgroundColor: 'rgba(39, 174, 96, 0.1)', tension: 0.1, fill: false, pointRadius: 0 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                    scales: {
+                        x: { display: false },
+                        y: { display: true, beginAtZero: false, title: { display: true, text: 'mV' } }
+                    },
+                    animation: false
+                }
+            });
+        }
+
+        function initHistoricalCharts() {
+            const commonOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, } }, scales: { x: { display: true, title: { display: true, text: 'Time' } }, y: { display: true, beginAtZero: false } } };
+            historicalCharts.bpm = new Chart(document.getElementById('histBpmChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Heart Rate', data: [], borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', tension: 0.4, fill: true }] }, options: commonOptions });
+            historicalCharts.spo2 = new Chart(document.getElementById('histSpo2Chart'), { type: 'line', data: { labels: [], datasets: [{ label: 'SpO2', data: [], borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.1)', tension: 0.4, fill: true }] }, options: commonOptions });
+            historicalCharts.temp = new Chart(document.getElementById('histTempChart'), { type: 'line', data: { labels: [], datasets: [{ label: 'Temperature', data: [], borderColor: '#f39c12', backgroundColor: 'rgba(243, 156, 18, 0.1)', tension: 0.4, fill: true }] }, options: commonOptions });
+        }
+
+        function updateLiveCharts(data) {
+            if (data.length === 0) return;
+            const reversedData = [...data].reverse();
+            const labels = reversedData.map(d => new Date(d.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+            const bpmData = reversedData.map(d => d.heart_rate).filter(v => v !== null && v !== undefined);
+            liveCharts.bpm.data.labels = labels.slice(-bpmData.length); liveCharts.bpm.data.datasets[0].data = bpmData; liveCharts.bpm.update('none');
+
+            const spo2Data = reversedData.map(d => d.spo2).filter(v => v !== null && v !== undefined);
+            liveCharts.spo2.data.labels = labels.slice(-spo2Data.length); liveCharts.spo2.data.datasets[0].data = spo2Data; liveCharts.spo2.update('none');
+
+            const tempData = reversedData.map(d => d.temperature).filter(v => v !== null && v !== undefined);
+            liveCharts.temp.data.labels = labels.slice(-tempData.length); liveCharts.temp.data.datasets[0].data = tempData; liveCharts.temp.update('none');
+        }
+
+        function updateEcgChart(buffer) {
+            if (!liveCharts.ecg) return;
+            liveCharts.ecg.data.datasets[0].data = buffer;
+            liveCharts.ecg.update('none');
+        }
+
+        function updateHistoricalCharts(data) {
+            if (!data || data.length === 0) { console.log('No historical data available'); return; }
+            const labels = data.map(d => new Date(d.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+
+            const bpmData = data.map(d => d.heart_rate).filter(v => v !== null && v !== undefined);
+            historicalCharts.bpm.data.labels = labels.slice(-bpmData.length); historicalCharts.bpm.data.datasets[0].data = bpmData; historicalCharts.bpm.update();
+
+            const spo2Data = data.map(d => d.spo2).filter(v => v !== null && v !== undefined);
+            historicalCharts.spo2.data.labels = labels.slice(-spo2Data.length); historicalCharts.spo2.data.datasets[0].data = spo2Data; historicalCharts.spo2.update();
+
+            const tempData = data.map(d => d.temperature).filter(v => v !== null && v !== undefined);
+            historicalCharts.temp.data.labels = labels.slice(-tempData.length); historicalCharts.temp.data.datasets[0].data = tempData; historicalCharts.temp.update();
+        }
+
+        function initializeDashboard() {
+            initLiveCharts();
+            initHistoricalCharts();
+            updateStatus(null);
+        }
+
+        window.addEventListener('load', initializeDashboard);
+    </script>
+</body>
+
+</html>
